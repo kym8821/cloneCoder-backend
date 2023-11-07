@@ -7,6 +7,7 @@ dotenv.config()
 
 const route = express.Router();
 route.use(session_config);
+
 const get_access_token = async (code:any, redirect_uri:string)=>{
   try{
     const result = await fetch(process.env.GOOGLE_TOKEN_URL as string, {
@@ -20,7 +21,6 @@ const get_access_token = async (code:any, redirect_uri:string)=>{
       })
     });
     const ret = await result.json();
-    console.log(ret.access_token);
     return ret;
   }catch(err){
     console.log(err);
@@ -49,21 +49,25 @@ route.get('/login', (req:Request, res:Response)=>{
   // 필수 옵션
   + `&response_type=code`
   // 가져올 정보
-  + `&scope=email profile`;
+  + `&scope=email%20profile`;
   res.redirect(url);
 });
 
 route.get('/login/redirect', async (req:any, res)=> {
   const {code} = req.query;
+  console.log(code);
   const token = await get_access_token(code, process.env.GOOGLE_LOGIN_REDIRECT_URI as string);
-  const result = await get_userinfo(token.access_token);
+  console.log(token);
+  const userInfo = await get_userinfo(token.access_token);
   
-  const select_sql:string = "SELECT * FROM google_user WHERE email=(?)"
-  const select_param:string[] = [result.email];
+  console.log(userInfo);
+  const select_sql:string = "SELECT * FROM user WHERE email=(?)"
+  const select_param:string[] = userInfo.email;
   try{
     const sql_result:any[] = await connection.query(select_sql, select_param);
+    console.log(sql_result);
     if(sql_result[0].length>0){
-      const update_sql = `UPDATE google_user SET access_token=(?) WHERE email=(?)`;
+      const update_sql = `UPDATE user SET access_token=(?) WHERE email=(?)`;
       const params = [token.access_token, sql_result[0][0].email];
       await connection.query(update_sql, params);
       const session_data = req.session;
@@ -73,7 +77,7 @@ route.get('/login/redirect', async (req:any, res)=> {
       };
       await session_data.save();
       console.log(req.session)
-      res.send(sql_result[0][0]);
+      res.send(sql_result[0]);
     }else{
       res.send("need to sign up");
     }
@@ -89,7 +93,9 @@ route.get("/logout", async (req:Request, res:Response)=>{
     try{
       const access_token = req.session.user.access_token;
       const logout_url = process.env.GOOGLE_LOGOUT_URL +`token=${access_token}`;
-      await fetch(logout_url);
+      await fetch(logout_url).catch((err)=>{
+        console.log(err);
+      });
     }catch(err){
       console.log("session error : " + err);
     }
@@ -118,17 +124,20 @@ route.get('/signup', (req, res)=>{
 route.get('/signup/redirect', async(req:Request, res:Response)=>{
   const {code} = req.query;
   const token = await get_access_token(code, process.env.GOOGLE_SIGNUP_REDIRECT_URI as string);
-  const result = await get_userinfo(token.access_token);
-  const select_sql:string = "SELECT * FROM google_user WHERE email=(?)"
-  const select_param:string[] = result.email;
+  const userInfo = await get_userinfo(token.access_token);
+  const select_sql:string = "SELECT * FROM user WHERE email=(?)"
+  const select_param:string[] = userInfo.email;
+  console.log(select_param);
   try{
-    const result:any[] = await connection.query(select_sql, select_param);
-    if(result.length==0){
-      console.log(result);
-      const sql:string = "INSERT INTO google_user (email, name, locale) VALUES (?, ?, ?)";
-      const params:string[] = [result[0].email, result[0].name, result[0].locale];
+    const sql_result:any[] = await connection.query(select_sql, select_param);
+    console.log(sql_result[0]);
+    if(sql_result[0].length==0){
+      const sql:string = "INSERT INTO user (email, name, locale) VALUES (?, ?, ?)";
+      const params:string[] = [userInfo.email, userInfo.name, userInfo.locale];
+      console.log(sql);
+      console.log(params);
       connection.query(sql, params);
-      res.json(result[0]); 
+      res.json("signup success");
     }else{
       res.json("already sign up");
     }

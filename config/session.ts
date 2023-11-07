@@ -1,11 +1,12 @@
 import session, {Session} from 'express-session'
-import detenv from 'dotenv'
+import dotenv from 'dotenv'
 
-detenv.config();
-
-export default session({
+dotenv.config();
+const session_config = session({
   secret: process.env.SESSION_SECRET as string,
   resave: false,
   saveUninitialized: false,
   cookie: { secure: false }
 })
+
+export default session_config; 
